@@ -1,7 +1,10 @@
-import numpy as np
-import torch
+import pytest
+
+np = pytest.importorskip("numpy")
+torch = pytest.importorskip("torch")
 
 from nanodet.model.head import build_head
+from nanodet.util import rbox2bbox
 from nanodet.util.yacs import CfgNode
 
 
@@ -128,3 +131,56 @@ def test_nanodet_plus_head_loss():
     assert onegt_aux_qfl_loss.item() > 0, "aux_qfl loss should be non-zero"
     assert onegt_aux_box_loss.item() > 0, "aux_box loss should be non-zero"
     assert onegt_aux_dfl_loss.item() > 0, "aux_dfl loss should be non-zero"
+
+
+def test_nanodet_plus_head_rotated():
+    head_cfg = dict(
+        name="NanoDetPlusHead",
+        num_classes=3,
+        input_channel=1,
+        feat_channels=32,
+        stacked_convs=1,
+        reg_max=5,
+        strides=[8, 16],
+        use_rotated_boxes=True,
+        loss=dict(
+            loss_qfl=dict(
+                name="QualityFocalLoss", use_sigmoid=True, beta=2.0, loss_weight=1.0
+            ),
+            loss_dfl=dict(name="DistributionFocalLoss", loss_weight=0.25),
+            loss_bbox=dict(name="GIoULoss", loss_weight=2.0),
+        ),
+    )
+    cfg = CfgNode(head_cfg)
+    head = build_head(cfg)
+    feat = [torch.rand(1, 1, 160 // stride, 160 // stride) for stride in [8, 16]]
+    preds = head.forward(feat)
+    num_points = sum([(160 // stride) ** 2 for stride in [8, 16]])
+    expected_dim = head.num_classes + (head.reg_max + 1) * 4 + head.rot_dim
+    assert preds.shape == (1, num_points, expected_dim)
+
+    gt_rbboxes = [np.array([[80.0, 96.0, 32.0, 24.0, 30.0]], dtype=np.float32)]
+    gt_bboxes = [rbox2bbox(gt_rbboxes[0])]
+    meta = dict(
+        img=torch.rand((1, 3, 160, 160)),
+        gt_bboxes=gt_bboxes,
+        gt_labels=[np.array([1], dtype=np.int64)],
+        gt_bboxes_ignore=[np.zeros((0, 4), dtype=np.float32)],
+        gt_rbboxes=gt_rbboxes,
+        gt_rbboxes_ignore=[np.zeros((0, 5), dtype=np.float32)],
+    )
+
+    _, loss_states = head.loss(preds, meta)
+    assert "loss_rot_wh" in loss_states
+    assert "loss_rot_angle" in loss_states
+
+    meta_infer = dict(
+        img=torch.rand((1, 3, 160, 160)),
+        warp_matrix=[np.eye(3, dtype=np.float32)],
+        img_info=dict(height=[160], width=[160], id=[0]),
+    )
+    det_results = head.post_process(preds, meta_infer)
+    assert 0 in det_results
+    for class_results in det_results[0].values():
+        for det in class_results:
+            assert len(det) == 6

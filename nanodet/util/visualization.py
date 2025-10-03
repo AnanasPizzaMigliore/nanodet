@@ -28,27 +28,41 @@ def overlay_bbox_cv(img, dets, class_names, score_thresh):
         for bbox in dets[label]:
             score = bbox[-1]
             if score > score_thresh:
-                x0, y0, x1, y1 = [int(i) for i in bbox[:4]]
-                all_box.append([label, x0, y0, x1, y1, score])
+                if len(bbox) >= 6:
+                    cx, cy, w, h, angle = bbox[:5]
+                    all_box.append([label, cx, cy, w, h, angle, score])
+                else:
+                    x0, y0, x1, y1 = [int(i) for i in bbox[:4]]
+                    all_box.append([label, x0, y0, x1, y1, score])
     all_box.sort(key=lambda v: v[5])
     for box in all_box:
-        label, x0, y0, x1, y1, score = box
+        label = box[0]
+        score = box[-1]
         # color = self.cmap(i)[:3]
         color = (_COLORS[label] * 255).astype(np.uint8).tolist()
         text = "{}:{:.1f}%".format(class_names[label], score * 100)
         txt_color = (0, 0, 0) if np.mean(_COLORS[label]) > 0.5 else (255, 255, 255)
         font = cv2.FONT_HERSHEY_SIMPLEX
         txt_size = cv2.getTextSize(text, font, 0.5, 2)[0]
-        cv2.rectangle(img, (x0, y0), (x1, y1), color, 2)
+        if len(box) == 7:
+            cx, cy, w, h, angle = box[1:6]
+            rect = ((float(cx), float(cy)), (float(w), float(h)), float(angle))
+            points = cv2.boxPoints(rect).astype(np.int32)
+            cv2.polylines(img, [points], True, color, 2)
+            x0, y0 = points.min(axis=0)
+        else:
+            x0, y0, x1, y1 = box[1:5]
+            x0, y0, x1, y1 = int(x0), int(y0), int(x1), int(y1)
+            cv2.rectangle(img, (x0, y0), (x1, y1), color, 2)
 
         cv2.rectangle(
             img,
-            (x0, y0 - txt_size[1] - 1),
-            (x0 + txt_size[0] + txt_size[1], y0 - 1),
+            (int(x0), int(y0) - txt_size[1] - 1),
+            (int(x0) + txt_size[0] + txt_size[1], int(y0) - 1),
             color,
             -1,
         )
-        cv2.putText(img, text, (x0, y0 - 1), font, 0.5, txt_color, thickness=1)
+        cv2.putText(img, text, (int(x0), int(y0) - 1), font, 0.5, txt_color, thickness=1)
     return img
 
 

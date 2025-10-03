@@ -1,4 +1,5 @@
 from .box_transform import bbox2distance, distance2bbox
+from .rotated_box import ensure_rboxes, rbox2bbox, rbox2poly, warp_rboxes
 from .check_point import (
     convert_avg_params,
     convert_old_model,
@@ -18,6 +19,10 @@ from .visualization import Visualizer, overlay_bbox_cv
 __all__ = [
     "distance2bbox",
     "bbox2distance",
+    "rbox2bbox",
+    "rbox2poly",
+    "warp_rboxes",
+    "ensure_rboxes",
     "convert_old_model",
     "load_model_weight",
     "save_model",
