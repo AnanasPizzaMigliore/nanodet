@@ -19,6 +19,8 @@ import numpy as np
 import torch
 from pycocotools.coco import COCO
 
+from nanodet.util import rbox2bbox
+
 from .base import BaseDataset
 
 
@@ -70,24 +72,41 @@ class CocoDataset(BaseDataset):
         ann_ids = self.coco_api.getAnnIds([img_id])
         anns = self.coco_api.loadAnns(ann_ids)
         gt_bboxes = []
+        gt_rbboxes = []
         gt_labels = []
         gt_bboxes_ignore = []
+        gt_rbboxes_ignore = []
         if self.use_instance_mask:
             gt_masks = []
         if self.use_keypoint:
             gt_keypoints = []
         for ann in anns:
-            x1, y1, w, h = ann["bbox"]
-            if ann["area"] <= 0 or w < 1 or h < 1:
+            bbox = ann["bbox"]
+            if len(bbox) == 4:
+                x1, y1, w, h = bbox
+                if ann["area"] <= 0 or w < 1 or h < 1:
+                    continue
+                rect = [x1, y1, x1 + w, y1 + h]
+                rbox = None
+            elif len(bbox) == 5:
+                cx, cy, w, h, angle = bbox
+                if ann["area"] <= 0 or w < 1 or h < 1:
+                    continue
+                rbox = [cx, cy, w, h, angle]
+                rect = rbox2bbox(np.array([rbox], dtype=np.float32))[0].tolist()
+            else:
                 continue
             if ann["category_id"] not in self.cat_ids:
                 continue
-            bbox = [x1, y1, x1 + w, y1 + h]
             if ann.get("iscrowd", False) or ann.get("ignore", False):
-                gt_bboxes_ignore.append(bbox)
+                gt_bboxes_ignore.append(rect)
+                if rbox is not None:
+                    gt_rbboxes_ignore.append(rbox)
             else:
-                gt_bboxes.append(bbox)
+                gt_bboxes.append(rect)
                 gt_labels.append(self.cat2label[ann["category_id"]])
+                if rbox is not None:
+                    gt_rbboxes.append(rbox)
                 if self.use_instance_mask:
                     gt_masks.append(self.coco_api.annToMask(ann))
                 if self.use_keypoint:
@@ -98,12 +117,24 @@ class CocoDataset(BaseDataset):
         else:
             gt_bboxes = np.zeros((0, 4), dtype=np.float32)
             gt_labels = np.array([], dtype=np.int64)
+        if gt_rbboxes:
+            gt_rbboxes = np.array(gt_rbboxes, dtype=np.float32)
+        else:
+            gt_rbboxes = np.zeros((0, 5), dtype=np.float32)
         if gt_bboxes_ignore:
             gt_bboxes_ignore = np.array(gt_bboxes_ignore, dtype=np.float32)
         else:
             gt_bboxes_ignore = np.zeros((0, 4), dtype=np.float32)
+        if gt_rbboxes_ignore:
+            gt_rbboxes_ignore = np.array(gt_rbboxes_ignore, dtype=np.float32)
+        else:
+            gt_rbboxes_ignore = np.zeros((0, 5), dtype=np.float32)
         annotation = dict(
-            bboxes=gt_bboxes, labels=gt_labels, bboxes_ignore=gt_bboxes_ignore
+            bboxes=gt_bboxes,
+            labels=gt_labels,
+            bboxes_ignore=gt_bboxes_ignore,
+            rbboxes=gt_rbboxes,
+            rbboxes_ignore=gt_rbboxes_ignore,
         )
         if self.use_instance_mask:
             annotation["masks"] = gt_masks
@@ -134,6 +165,8 @@ class CocoDataset(BaseDataset):
             gt_bboxes=ann["bboxes"],
             gt_labels=ann["labels"],
             gt_bboxes_ignore=ann["bboxes_ignore"],
+            gt_rbboxes=ann["rbboxes"],
+            gt_rbboxes_ignore=ann["rbboxes_ignore"],
         )
         if self.use_instance_mask:
             meta["gt_masks"] = ann["masks"]

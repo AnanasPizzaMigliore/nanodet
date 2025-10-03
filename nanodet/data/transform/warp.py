@@ -19,6 +19,8 @@ from typing import Dict, Optional, Tuple
 import cv2
 import numpy as np
 
+from nanodet.util import warp_rboxes
+
 
 def get_flip_matrix(prob=0.5):
     F = np.eye(3)
@@ -185,10 +187,18 @@ def warp_and_resize(
     if "gt_bboxes" in meta:
         boxes = meta["gt_bboxes"]
         meta["gt_bboxes"] = warp_boxes(boxes, M, dst_shape[0], dst_shape[1])
+    if "gt_rbboxes" in meta:
+        meta["gt_rbboxes"] = warp_rboxes(
+            meta["gt_rbboxes"], M, dst_shape[0], dst_shape[1]
+        )
     if "gt_bboxes_ignore" in meta:
         bboxes_ignore = meta["gt_bboxes_ignore"]
         meta["gt_bboxes_ignore"] = warp_boxes(
             bboxes_ignore, M, dst_shape[0], dst_shape[1]
+        )
+    if "gt_rbboxes_ignore" in meta:
+        meta["gt_rbboxes_ignore"] = warp_rboxes(
+            meta["gt_rbboxes_ignore"], M, dst_shape[0], dst_shape[1]
         )
     if "gt_masks" in meta:
         for i, mask in enumerate(meta["gt_masks"]):
@@ -348,10 +358,18 @@ class ShapeTransform:
         if "gt_bboxes" in meta_data:
             boxes = meta_data["gt_bboxes"]
             meta_data["gt_bboxes"] = warp_boxes(boxes, M, dst_shape[0], dst_shape[1])
+        if "gt_rbboxes" in meta_data:
+            meta_data["gt_rbboxes"] = warp_rboxes(
+                meta_data["gt_rbboxes"], M, dst_shape[0], dst_shape[1]
+            )
         if "gt_bboxes_ignore" in meta_data:
             bboxes_ignore = meta_data["gt_bboxes_ignore"]
             meta_data["gt_bboxes_ignore"] = warp_boxes(
                 bboxes_ignore, M, dst_shape[0], dst_shape[1]
+            )
+        if "gt_rbboxes_ignore" in meta_data:
+            meta_data["gt_rbboxes_ignore"] = warp_rboxes(
+                meta_data["gt_rbboxes_ignore"], M, dst_shape[0], dst_shape[1]
             )
         if "gt_masks" in meta_data:
             for i, mask in enumerate(meta_data["gt_masks"]):
